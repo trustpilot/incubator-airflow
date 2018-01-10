@@ -208,7 +208,8 @@ class DataFlowHook(GoogleCloudBaseHook):
                 'Project not specified')
         request = service.projects().templates().launch(projectId=variables['project'],
                                                         gcsPath=dataflow_template,
-                                                        body=body)
+                                                        body=body,
+                                                        location='europe-west1')
         response = request.execute()
         _DataflowJob(
             self.get_conn(), variables['project'], name, self.poll_sleep).wait_for_done()
