@@ -33,8 +33,8 @@ class _DataflowJob(LoggingMixin):
         self._poll_sleep = poll_sleep
 
     def _get_job_id_from_name(self):
-        jobs = self._dataflow.projects().jobs().list(
-            projectId=self._project_number
+        jobs = self._dataflow.projects().locations().jobs().list(
+            projectId=self._project_number, location='europe-west1'
         ).execute()
         for job in jobs['jobs']:
             if job['name'] == self._job_name:
@@ -46,8 +46,9 @@ class _DataflowJob(LoggingMixin):
         if self._job_id is None:
             job = self._get_job_id_from_name()
         else:
-            job = self._dataflow.projects().jobs().get(projectId=self._project_number,
-                                                       jobId=self._job_id).execute()
+            job = self._dataflow.projects().locations().jobs().get(projectId=self._project_number,
+                                                       jobId=self._job_id,
+                                                       location='europe-west1').execute()
         if 'currentState' in job:
             self.log.info(
                 'Google Cloud DataFlow job %s is %s',
@@ -206,7 +207,7 @@ class DataFlowHook(GoogleCloudBaseHook):
         if variables['project'] is None:
             raise Exception(
                 'Project not specified')
-        request = service.projects().templates().launch(projectId=variables['project'],
+        request = service.projects().locations().templates().launch(projectId=variables['project'],
                                                         gcsPath=dataflow_template,
                                                         body=body,
                                                         location='europe-west1')
