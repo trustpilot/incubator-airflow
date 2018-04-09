@@ -19,6 +19,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import copy
 import datetime
 from apiclient import errors
 import httplib2
@@ -27,6 +28,7 @@ import unittest
 from airflow import configuration, DAG
 from airflow.contrib.operators.mlengine_operator import MLEngineBatchPredictionOperator
 from airflow.contrib.operators.mlengine_operator import MLEngineTrainingOperator
+from airflow.contrib.operators.mlengine_operator import MLEngineVersionOperator
 
 from mock import ANY
 from mock import patch
@@ -323,6 +325,33 @@ class MLEngineTrainingOperatorTest(unittest.TestCase):
             hook_instance.create_job.assert_called_with(
                 'test-project', self.TRAINING_INPUT, ANY)
 
+    def testSuccessCreateTrainingJobWithOptionalArgs(self):
+        training_input = copy.deepcopy(self.TRAINING_INPUT)
+        training_input['trainingInput']['runtimeVersion'] = '1.6'
+        training_input['trainingInput']['pythonVersion'] = '3.5'
+        training_input['trainingInput']['jobDir'] = 'gs://some-bucket/jobs/test_training'
+
+        with patch('airflow.contrib.operators.mlengine_operator.MLEngineHook') \
+                as mock_hook:
+            success_response = self.TRAINING_INPUT.copy()
+            success_response['state'] = 'SUCCEEDED'
+            hook_instance = mock_hook.return_value
+            hook_instance.create_job.return_value = success_response
+
+            training_op = MLEngineTrainingOperator(
+                runtime_version='1.6',
+                python_version='3.5',
+                job_dir='gs://some-bucket/jobs/test_training',
+                **self.TRAINING_DEFAULT_ARGS)
+            training_op.execute(None)
+
+            mock_hook.assert_called_with(gcp_conn_id='google_cloud_default',
+                                         delegate_to=None)
+            # Make sure only 'create_job' is invoked on hook instance
+            self.assertEquals(len(hook_instance.mock_calls), 1)
+            hook_instance.create_job.assert_called_with(
+                'test-project', training_input, ANY)
+
     def testHttpError(self):
         http_error_code = 403
         with patch('airflow.contrib.operators.mlengine_operator.MLEngineHook') \
@@ -367,6 +396,38 @@ class MLEngineTrainingOperatorTest(unittest.TestCase):
             hook_instance.create_job.assert_called_with(
                 'test-project', self.TRAINING_INPUT, ANY)
             self.assertEquals('A failure message', str(context.exception))
+
+
+class MLEngineVersionOperatorTest(unittest.TestCase):
+    VERSION_DEFAULT_ARGS = {
+        'project_id': 'test-project',
+        'model_name': 'test-model',
+        'task_id': 'test-version'
+    }
+    VERSION_INPUT = {
+        'name': 'v1',
+        'deploymentUri': 'gs://some-bucket/jobs/test_training/model.pb',
+        'runtimeVersion': '1.6'
+    }
+
+    def testSuccessCreateVersion(self):
+        with patch('airflow.contrib.operators.mlengine_operator.MLEngineHook') \
+                as mock_hook:
+            success_response = {'name': 'some-name', 'done': True}
+            hook_instance = mock_hook.return_value
+            hook_instance.create_version.return_value = success_response
+
+            training_op = MLEngineVersionOperator(
+                version=self.VERSION_INPUT,
+                **self.VERSION_DEFAULT_ARGS)
+            training_op.execute(None)
+
+            mock_hook.assert_called_with(gcp_conn_id='google_cloud_default',
+                                         delegate_to=None)
+            # Make sure only 'create_version' is invoked on hook instance
+            self.assertEquals(len(hook_instance.mock_calls), 1)
+            hook_instance.create_version.assert_called_with(
+                'test-project', 'test-model', self.VERSION_INPUT)
 
 
 if __name__ == '__main__':
