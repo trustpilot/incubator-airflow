@@ -15,23 +15,21 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from __future__ import absolute_import, division, print_function
 
 import copy
 import datetime
-from apiclient import errors
-import httplib2
 import unittest
 
-from airflow import configuration, DAG
-from airflow.contrib.operators.mlengine_operator import MLEngineBatchPredictionOperator
-from airflow.contrib.operators.mlengine_operator import MLEngineTrainingOperator
-from airflow.contrib.operators.mlengine_operator import MLEngineVersionOperator
+import httplib2
+from apiclient import errors
+from mock import ANY, patch
 
-from mock import ANY
-from mock import patch
+from airflow import DAG, configuration
+from airflow.contrib.operators.mlengine_operator import (MLEngineBatchPredictionOperator,
+                                                         MLEngineTrainingOperator,
+                                                         MLEngineVersionOperator)
+from airflow.exceptions import AirflowException
 
 DEFAULT_DATE = datetime.datetime(2017, 6, 6)
 
@@ -60,7 +58,7 @@ class MLEngineBatchPredictionOperatorTest(unittest.TestCase):
         'data_format': 'TEXT',
         'input_paths': ['gs://legal-bucket-dash-Capital/legal-input-path/*'],
         'output_path':
-            'gs://12_legal_bucket_underscore_number/legal-output-path',
+        'gs://12_legal_bucket_underscore_number/legal-output-path',
         'task_id': 'test-prediction'
     }
 
@@ -107,14 +105,12 @@ class MLEngineBatchPredictionOperatorTest(unittest.TestCase):
 
             mock_hook.assert_called_with('google_cloud_default', None)
             hook_instance.create_job.assert_called_once_with(
-                'test-project',
-                {
+                'test-project', {
                     'jobId': 'test_prediction',
                     'predictionInput': input_with_model
                 }, ANY)
-            self.assertEquals(
-                success_message['predictionOutput'],
-                prediction_output)
+            self.assertEquals(success_message['predictionOutput'],
+                              prediction_output)
 
     def testSuccessWithVersion(self):
         with patch('airflow.contrib.operators.mlengine_operator.MLEngineHook') \
@@ -134,7 +130,8 @@ class MLEngineBatchPredictionOperatorTest(unittest.TestCase):
             hook_instance.create_job.return_value = success_message
 
             prediction_task = MLEngineBatchPredictionOperator(
-                job_id='test_prediction', project_id='test-project',
+                job_id='test_prediction',
+                project_id='test-project',
                 region=input_with_version['region'],
                 data_format=input_with_version['dataFormat'],
                 input_paths=input_with_version['inputPaths'],
@@ -147,14 +144,12 @@ class MLEngineBatchPredictionOperatorTest(unittest.TestCase):
 
             mock_hook.assert_called_with('google_cloud_default', None)
             hook_instance.create_job.assert_called_with(
-                'test-project',
-                {
+                'test-project', {
                     'jobId': 'test_prediction',
                     'predictionInput': input_with_version
                 }, ANY)
-            self.assertEquals(
-                success_message['predictionOutput'],
-                prediction_output)
+            self.assertEquals(success_message['predictionOutput'],
+                              prediction_output)
 
     def testSuccessWithURI(self):
         with patch('airflow.contrib.operators.mlengine_operator.MLEngineHook') \
@@ -186,48 +181,51 @@ class MLEngineBatchPredictionOperatorTest(unittest.TestCase):
 
             mock_hook.assert_called_with('google_cloud_default', None)
             hook_instance.create_job.assert_called_with(
-                'test-project',
-                {
+                'test-project', {
                     'jobId': 'test_prediction',
                     'predictionInput': input_with_uri
                 }, ANY)
-            self.assertEquals(
-                success_message['predictionOutput'],
-                prediction_output)
+            self.assertEquals(success_message['predictionOutput'],
+                              prediction_output)
 
     def testInvalidModelOrigin(self):
         # Test that both uri and model is given
         task_args = self.BATCH_PREDICTION_DEFAULT_ARGS.copy()
         task_args['uri'] = 'gs://fake-uri/saved_model'
         task_args['model_name'] = 'fake_model'
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(AirflowException) as context:
             MLEngineBatchPredictionOperator(**task_args).execute(None)
-        self.assertEquals('Ambiguous model origin.', str(context.exception))
+        self.assertEquals('Ambiguous model origin: Both uri and '
+                          'model/version name are provided.',
+                          str(context.exception))
 
         # Test that both uri and model/version is given
         task_args = self.BATCH_PREDICTION_DEFAULT_ARGS.copy()
         task_args['uri'] = 'gs://fake-uri/saved_model'
         task_args['model_name'] = 'fake_model'
         task_args['version_name'] = 'fake_version'
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(AirflowException) as context:
             MLEngineBatchPredictionOperator(**task_args).execute(None)
-        self.assertEquals('Ambiguous model origin.', str(context.exception))
+        self.assertEquals('Ambiguous model origin: Both uri and '
+                          'model/version name are provided.',
+                          str(context.exception))
 
         # Test that a version is given without a model
         task_args = self.BATCH_PREDICTION_DEFAULT_ARGS.copy()
         task_args['version_name'] = 'bare_version'
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(AirflowException) as context:
             MLEngineBatchPredictionOperator(**task_args).execute(None)
-        self.assertEquals(
-            'Missing model origin.',
-            str(context.exception))
+        self.assertEquals('Missing model: Batch prediction expects a model '
+                          'name when a version name is provided.',
+                          str(context.exception))
 
         # Test that none of uri, model, model/version is given
         task_args = self.BATCH_PREDICTION_DEFAULT_ARGS.copy()
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(AirflowException) as context:
             MLEngineBatchPredictionOperator(**task_args).execute(None)
         self.assertEquals(
-            'Missing model origin.',
+            'Missing model origin: Batch prediction expects a '
+            'model, a model & version combination, or a URI to a savedModel.',
             str(context.exception))
 
     def testHttpError(self):
@@ -243,7 +241,8 @@ class MLEngineBatchPredictionOperatorTest(unittest.TestCase):
             hook_instance.create_job.side_effect = errors.HttpError(
                 resp=httplib2.Response({
                     'status': http_error_code
-                }), content=b'Forbidden')
+                }),
+                content=b'Forbidden')
 
             with self.assertRaises(errors.HttpError) as context:
                 prediction_task = MLEngineBatchPredictionOperator(
@@ -260,8 +259,7 @@ class MLEngineBatchPredictionOperatorTest(unittest.TestCase):
 
                 mock_hook.assert_called_with('google_cloud_default', None)
                 hook_instance.create_job.assert_called_with(
-                    'test-project',
-                    {
+                    'test-project', {
                         'jobId': 'test_prediction',
                         'predictionInput': input_with_model
                     }, ANY)
@@ -315,11 +313,12 @@ class MLEngineTrainingOperatorTest(unittest.TestCase):
             hook_instance = mock_hook.return_value
             hook_instance.create_job.return_value = success_response
 
-            training_op = MLEngineTrainingOperator(**self.TRAINING_DEFAULT_ARGS)
+            training_op = MLEngineTrainingOperator(
+                **self.TRAINING_DEFAULT_ARGS)
             training_op.execute(None)
 
-            mock_hook.assert_called_with(gcp_conn_id='google_cloud_default',
-                                         delegate_to=None)
+            mock_hook.assert_called_with(
+                gcp_conn_id='google_cloud_default', delegate_to=None)
             # Make sure only 'create_job' is invoked on hook instance
             self.assertEquals(len(hook_instance.mock_calls), 1)
             hook_instance.create_job.assert_called_with(
@@ -360,7 +359,8 @@ class MLEngineTrainingOperatorTest(unittest.TestCase):
             hook_instance.create_job.side_effect = errors.HttpError(
                 resp=httplib2.Response({
                     'status': http_error_code
-                }), content=b'Forbidden')
+                }),
+                content=b'Forbidden')
 
             with self.assertRaises(errors.HttpError) as context:
                 training_op = MLEngineTrainingOperator(
