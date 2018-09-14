@@ -157,6 +157,7 @@ s3 = [
 ]
 samba = ['pysmbclient>=0.1.3']
 slack = ['slackclient>=1.0.0']
+mongo = ['pymongo>=3.6.0']
 statsd = ['statsd>=3.0.1, <4.0']
 vertica = ['vertica-python>=0.5.1']
 ldap = ['ldap3>=0.9.9.1']
@@ -174,13 +175,14 @@ qds = ['qds-sdk>=1.9.6']
 cloudant = ['cloudant>=0.5.9,<2.0'] # major update coming soon, clamp to 0.x
 redis = ['redis>=2.10.5']
 
-all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant
+all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant + mongo
 devel = [
     'click',
     'freezegun',
     'jira',
     'lxml>=3.3.4',
     'mock',
+    'mongomock',
     'moto==1.1.19',
     'nose',
     'nose-ignore-docstring==0.2',
@@ -227,6 +229,7 @@ def do_setup():
             'lxml>=3.6.0, <4.0',
             'markdown>=2.5.2, <3.0',
             'pandas>=0.17.1, <1.0.0',
+            'pendulum==1.3.1',
             'psutil>=4.2.0, <5.0.0',
             'pygments>=2.0.1, <3.0',
             'python-daemon>=2.1.1, <2.2',
@@ -237,6 +240,7 @@ def do_setup():
             'sqlalchemy>=0.9.8',
             'tabulate>=0.7.5, <0.8.0',
             'thrift>=0.9.2',
+            'tzlocal>=1.4',
             'zope.deprecation>=4.0, <5.0',
         ],
         extras_require={
@@ -263,6 +267,7 @@ def do_setup():
             'jdbc': jdbc,
             'kerberos': kerberos,
             'ldap': ldap,
+            'mongo': mongo,
             'mssql': mssql,
             'mysql': mysql,
             'oracle': oracle,
